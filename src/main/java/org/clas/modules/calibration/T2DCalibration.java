@@ -26,6 +26,7 @@ public class T2DCalibration {
 
     private static F1D fitgrdoca;
 
+
     /**
      * Creates and returns the main T2D panel with calibration plots and buttons.
      */
@@ -40,21 +41,29 @@ public class T2DCalibration {
         H2F htdoca = new H2F("htdoca", "htdoca", 100, 0, 5000, 100, 0., 0.4);
         GraphErrors grdoca = new GraphErrors();
 
+        CalibrationUtils cbutils = new CalibrationUtils(0);
+
         // Open the HIPO file and fill the histograms.
         HipoDataSource reader = new HipoDataSource();
         reader.open(inputFile);
         int nevents = reader.getSize();
         for (int i = 0; i < nevents; i++) {
             HipoDataEvent event = (HipoDataEvent) reader.gotoEvent(i);
-            if (event.hasBank("AHDC::adc")) {
-                HipoDataBank bank = (HipoDataBank) event.getBank("AHDC::adc");
-                int rows = bank.rows();
+            if (event.hasBank("AHDC:Hits")) {
+                HipoDataBank hitBank = (HipoDataBank) event.getBank("AHDC::Hits");
+                int rows = hitBank.rows();
                 for (int loop = 0; loop < rows; loop++) {
-                    float time = bank.getFloat("time", loop);
-                    int ped = bank.getInt("ped", loop);
+                    int layer = (int)hitBank.getByte("layer",loop);
+                    int component = hitBank.getInt("wire",loop);
+                    int slayer = (int)hitBank.getByte("superlayer",loop);
+                    layer += 10*slayer;
+                    //time is now t0 subtracted time in Hits bank
+                    //float time = hitBank.getFloat("time", loop) - (float)cbutils.getT0off(layer,component);
+                    float time = hitBank.getFloat("time", loop);
+                    float doca = hitBank.getInt("trackDoca", loop);
                     hadc.fill(time);
-                    hdoca.fill(ped / 1000.);
-                    htdoca.fill(time, ped / 1000.);
+                    hdoca.fill(doca);
+                    htdoca.fill(time, doca);
                 }
             }
         }
@@ -88,7 +97,8 @@ public class T2DCalibration {
         DataFitter.fit(fitgrdoca, grdoca, "Q");
 
         // Retrieve previous T2D fit parameters from CCDB.
-        double[] ccdbFitParams = CalibrationUtils.GetT2DFitParamsFromCCDB(0);
+
+        double[] ccdbFitParams = cbutils.GetT2DFitParamsFromCCDB();
         F1D previous_t2dfit = new F1D("previous_t2dfit",
                 "[p3]*x*x*x+[p2]*x*x+[p1]*x+[p0]",
                 xMin, xMax);
@@ -112,15 +122,21 @@ public class T2DCalibration {
         reader.open(inputFile);
         for (int i = 0; i < nevents; i++) {
             HipoDataEvent event = (HipoDataEvent) reader.gotoEvent(i);
-            if (event.hasBank("AHDC::adc")) {
-                HipoDataBank bank = (HipoDataBank) event.getBank("AHDC::adc");
-                int rows = bank.rows();
+            if (event.hasBank("AHDC::Hits")) {
+                HipoDataBank hitBank = (HipoDataBank) event.getBank("AHDC::Hits");
+                int rows = hitBank.rows();
                 for (int loop = 0; loop < rows; loop++) {
-                    float time = bank.getFloat("time", loop);
-                    int ped = bank.getInt("ped", loop);
+                    int layer = (int)hitBank.getByte("layer",loop);
+                    int component = hitBank.getInt("wire",loop);
+                    int slayer = (int)hitBank.getByte("superlayer",loop);
+                    layer += 10*slayer;
+                    //time is now t0 subtracted time in Hits bank
+                    float time = hitBank.getFloat("time", loop);
+                    //float time = hitBank.getFloat("time", loop) - (float)cbutils.getT0off(layer,component);
+                    float doca = hitBank.getInt("trackDoca", loop);
                     // Evaluate the grdoca fit function.
                     double pedfit = fitgrdoca.evaluate(time);
-                    double residual = ped / 1000. - pedfit;
+                    double residual = doca - pedfit;
                     hresidual.fill(residual);
                 }
             }
@@ -269,23 +285,31 @@ public class T2DCalibration {
                     100, -3, 3);
         }
         H1F hresidual = new H1F("residuals", "Residuals", 100, -3, 3);
+        CalibrationUtils cbutils = new CalibrationUtils(0);
         HipoDataSource reader = new HipoDataSource();
         reader.open(inputFile);
         int nevents = reader.getSize();
         for (int i = 0; i < nevents; i++) {
             HipoDataEvent event = (HipoDataEvent) reader.gotoEvent(i);
-            if (event.hasBank("AHDC::adc")) {
-                HipoDataBank bank = (HipoDataBank) event.getBank("AHDC::adc");
-                int rows = bank.rows();
+            if (event.hasBank("AHDC::Hits")) {
+                HipoDataBank hitBank = (HipoDataBank) event.getBank("AHDC::Hits");
+                int rows = hitBank.rows();
                 for (int loop = 0; loop < rows; loop++) {
-                    float time = bank.getFloat("time", loop);
-                    int ped = bank.getInt("ped", loop);
-                    // Evaluate the fit function from grdoca.
+                    int layer = (int)hitBank.getByte("layer",loop);
+                    int component = hitBank.getInt("wire",loop);
+                    int slayer = (int)hitBank.getByte("superlayer",loop);
+                    layer += 10*slayer;
+                    //time is now T0 subtracted hit time in Hits bank
+                    float time = hitBank.getFloat("time", loop);
+                    //float time = hitBank.getFloat("time", loop) - (float)cbutils.getT0off(layer,component);
+                    float doca = hitBank.getInt("trackDoca", loop);
+                    // Evaluate the grdoca fit function.
                     double pedfit = fitgrdoca.evaluate(time);
-                    hresidual.fill(ped / 1000. - pedfit);
+                    double residual = doca - pedfit;
+                    hresidual.fill(residual);
                     int binIndex = (int) ((time - TIME_START) / TIME_INTERVAL);
                     if (binIndex >= 0 && binIndex < numBins) {
-                        residualHistograms[binIndex].fill(ped / 1000. - pedfit);
+                        residualHistograms[binIndex].fill(residual);
                     }
                 }
             }
