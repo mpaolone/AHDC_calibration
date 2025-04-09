@@ -35,6 +35,8 @@ public class T0Calibration {
     private static final Color customOrange = new Color(255, 180, 100);
     // Call hipo file from config
     private static final String inputFile = Config.Hipo_FILE;
+    private static final int adcThresh = 100; //cut on ADC for all wires
+    public static double offset = -20.0; //in ns, offset applied to final T0 for all wires
 
     public static JTabbedPane createT0Panel() {
         JTabbedPane layeredT0Tabs = new JTabbedPane();
@@ -50,11 +52,14 @@ public class T0Calibration {
         int nevents = reader.getSize();
         for (int i = 0; i < nevents; i++) {
             HipoDataEvent event = (HipoDataEvent) reader.gotoEvent(i);
+            //System.out.println("Looking for ADC bank");
             if (event.hasBank("AHDC::adc")) {
+                //System.out.println("Has ADC bank");
                 HipoDataBank bank = (HipoDataBank) event.getBank("AHDC::adc");
                 int rows = bank.rows();
                 for (int loop = 0; loop < rows; loop++) {
-                    float time = bank.getFloat("time", loop);
+                    float time = bank.getFloat("leadingEdgeTime", loop);
+                    float adc =  bank.getInt("ADC", loop);
                     int layer = bank.getInt("layer", loop);
                     int component = bank.getInt("component", loop);
                     // Only store T0 data for expected layers.
@@ -63,8 +68,11 @@ public class T0Calibration {
                     layerHistograms.get(layer).computeIfAbsent(component,
                             k -> new H1F("Layer " + layer + " Component " + component,
                                     "Time for Wire " + component,
-                                    100, 0, 5000));
-                    layerHistograms.get(layer).get(component).fill(time);
+                                    500, 0, 1000));
+                    if(adc > adcThresh) {
+                        layerHistograms.get(layer).get(component).fill(time);
+                        //System.out.println("Filling:    " + adc + "    " + time);
+                    }
                 }
             }
         }
@@ -88,34 +96,135 @@ public class T0Calibration {
                 int wire = entry.getKey();
                 H1F hist = entry.getValue();
 
+                System.out.println("Fitting:    " + layer + "  " + wire);
+
                 double mean = hist.getMean();
                 double rms = hist.getRMS();
                 double xMin = Math.max(0, mean - 2 * rms);
                 double xMax = Math.min(hist.getXaxis().max(), mean + 3 * rms);
 
+
                 F1D fitF = new F1D("T0Fit",
                         "(1./(1.+exp([p0]-[p1]*x))*exp([p2]-[p3]*x))+[p4]",
                         xMin, xMax);
+
+                F1D fitF2 = new F1D("T0Fit2","[p0]*exp(pow((x - [p1])/[p2],2))/[p2]",xMin,xMax);
+                //F1D fitF2 = new F1D("gaus");
+                //fitF2.setRange(xMin,xMax);
+
                 // Set initial parameters (example values).
-                fitF.setParameter(0, -52);
+                //fitF.setParameter(0, -52);
+                /*
+                fitF.setParameter(0, -15);
                 fitF.setParameter(1, -0.04);
-                fitF.setParameter(2, -15);
+                fitF.setParameter(2, -5);
                 fitF.setParameter(3, -0.018);
                 fitF.setParameter(4, 0.898);
+                */
 
-                DataFitter.fit(fitF, hist, "Q");
+                /*
+                fitF.setParameter(0, -45.0);
+                fitF.setParameter(1, -0.12);
+                fitF.setParameter(2, -23.55);
+                fitF.setParameter(3, -0.033);
+                fitF.setParameter(4, 1.0);
+                */
 
-                double T0 = fitF.getParameter(0) / fitF.getParameter(1);
+                fitF.setParameter(0, -66.5);
+                fitF.setParameter(1, -0.128);
+                fitF.setParameter(2, -51.5);
+                fitF.setParameter(3, -0.10);
+                fitF.setParameter(4, 1.0);
+
+
+                fitF.setParStep(0,0.1);
+                fitF.setParStep(1,0.01);
+                fitF.setParStep(2,0.1);
+                fitF.setParStep(3,0.01);
+                fitF.setParStep(4,0.1);
+
+
+                DataFitter.fit(fitF, hist, "V");
+
+                //double T0 = fitF.getParameter(0) / fitF.getParameter(1);
+                double T0 = (fitF.getParameter(0) / fitF.getParameter(1) +
+                        fitF.getParameter(2) / fitF.getParameter(3))/2.0 + offset;
+
+                double perErr0 = fitF.parameter(0).error()/fitF.getParameter(0);
+                double perErr1 = fitF.parameter(1).error()/fitF.getParameter(1);
+                double perErr2 = fitF.parameter(2).error()/fitF.getParameter(2);
+                double perErr3 = fitF.parameter(3).error()/fitF.getParameter(3);
+
+                double T0Err = T0*Math.sqrt(perErr0*perErr0 + perErr1*perErr1 + perErr2*perErr2 + perErr3*perErr3);
+
+
+                /*
                 double T0Err = Math.sqrt(
                         Math.pow(fitF.parameter(0).error() / fitF.getParameter(1), 2) +
                                 Math.pow(fitF.getParameter(0) * fitF.parameter(1).error() /
                                         Math.pow(fitF.getParameter(1), 2), 2)
                 );
+                 */
                 double chi2 = fitF.getChiSquare();
                 double ndf = fitF.getNDF();
                 double chi2ndf = (ndf > 0) ? (chi2 / ndf) : 0.0;
 
+                if(T0Err > 500.0) T0Err = 0.0;
+
+                if(chi2ndf > 1.0) {
+                    /*
+                    fitF.setParameter(0, -45.0);
+                    fitF.setParameter(1, -0.12);
+                    fitF.setParameter(2, -23.55);
+                    fitF.setParameter(3, -0.033);
+                    fitF.setParameter(4, 1.0);
+                    */
+
+                    fitF.setParameter(0, -80.0);
+                    fitF.setParameter(1, -0.14);
+                    fitF.setParameter(2, -70.0);
+                    fitF.setParameter(3, -0.12);
+                    fitF.setParameter(4, 1.0);
+
+                    DataFitter.fit(fitF, hist, "V");
+
+                    T0 = (fitF.getParameter(0) / fitF.getParameter(1) +
+                            fitF.getParameter(2) / fitF.getParameter(3))/2.0 + offset;
+
+                    perErr0 = fitF.parameter(0).error()/fitF.getParameter(0);
+                    perErr1 = fitF.parameter(1).error()/fitF.getParameter(1);
+                    perErr2 = fitF.parameter(2).error()/fitF.getParameter(2);
+                    perErr3 = fitF.parameter(3).error()/fitF.getParameter(3);
+
+                    T0Err = T0*Math.sqrt(perErr0*perErr0 + perErr1*perErr1 + perErr2*perErr2 + perErr3*perErr3);
+
+                    /*
+                    fitF2.setParameter(0, hist.getMax());
+                    fitF2.setParameter(1, hist.getXaxis().getBinCenter(hist.getMaximumBin()));
+                    fitF2.setParameter(2, hist.getRMS());
+
+                    DataFitter.fit(fitF2, hist, "V");
+
+                    T0 = fitF2.getParameter(1) - 2.0 * fitF2.getParameter(2);
+                    T0Err = Math.sqrt(Math.pow(fitF2.parameter(1).error(), 2) +
+                            Math.pow(fitF2.parameter(2).error(), 2));
+
+                    chi2 = fitF2.getChiSquare();
+                    ndf = fitF2.getNDF();
+                    chi2ndf = (ndf > 0) ? (chi2 / ndf) : 0.0;
+                    layerFitMap.put(wire, fitF2);
+                     */
+                }
+
                 layerFitMap.put(wire, fitF);
+                System.out.println("Done Fitting:    " + T0 + "  " + chi2ndf);
+                System.out.println("    0: " + fitF.getParameter(0));
+                System.out.println("    1: " + fitF.getParameter(1));
+                System.out.println("    2: " + fitF.getParameter(2));
+                System.out.println("    3: " + fitF.getParameter(3));
+                System.out.println("    4: " + fitF.getParameter(4));
+
+
                 layerGraph.addPoint(wire, T0, 0, T0Err);
 
                 tableData[rowIndex][0] = wire;

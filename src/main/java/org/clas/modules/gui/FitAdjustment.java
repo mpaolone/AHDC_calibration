@@ -6,15 +6,19 @@
 
 package org.clas.modules.gui;
 
+import org.clas.modules.calibration.T0Calibration;
+import org.jlab.groot.data.DataLine;
 import org.jlab.groot.data.GraphErrors;
 import org.jlab.groot.data.H1F;
 import org.jlab.groot.fitter.DataFitter;
 import org.jlab.groot.math.F1D;
 import org.jlab.groot.graphics.EmbeddedCanvas;
+import org.jlab.jnp.graphics.widgets.DrawNode2D;
 
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
+import java.awt.geom.Line2D;
 
 public class FitAdjustment {
 
@@ -28,12 +32,13 @@ public class FitAdjustment {
         fitCanvas.divide(1, 1);
         fitCanvas.cd(0);
         fitCanvas.draw(histogram);
+
         fitCanvas.draw(fitF, "same");
 
         JPanel controls = new JPanel(new GridLayout(3, 3));
 
-        JTextField xMinField = new JTextField(String.valueOf(fitF.getMin()));
-        JTextField xMaxField = new JTextField(String.valueOf(fitF.getMax()));
+        JTextField xMinField = new JTextField(String.format("%.4f",fitF.getMin()));
+        JTextField xMaxField = new JTextField(String.format("%.4f",fitF.getMax()));
         controls.add(new JLabel("Fit Min:"));
         controls.add(xMinField);
         controls.add(new JLabel("Fit Max:"));
@@ -42,10 +47,20 @@ public class FitAdjustment {
         // 5 parameters => p0...p4
         JTextField[] paramFields = new JTextField[5];
         for (int i = 0; i < 5; i++) {
-            paramFields[i] = new JTextField(String.valueOf(fitF.getParameter(i)));
+            //paramFields[i] = new JTextField(String.valueOf(fitF.getParameter(i)));
+            paramFields[i] = new JTextField(String.format("%.4f",fitF.getParameter(i)));
             controls.add(new JLabel("P" + i + ":"));
             controls.add(paramFields[i]);
         }
+        T0Calibration calib = new T0Calibration();
+
+        double T0 = 0.5*(fitF.getParameter(0)/fitF.getParameter(1) +
+                fitF.getParameter(2)/fitF.getParameter(3)) + calib.offset;
+        double lmax = histogram.getMax()*1.2;
+        DataLine line = new DataLine(T0, 0, T0, lmax);
+        line.setLineColor(2);
+        line.setLineStyle(2);
+        fitCanvas.draw(line);
 
         JButton refitButton = new JButton("Refit");
         controls.add(refitButton);
@@ -78,12 +93,23 @@ public class FitAdjustment {
                     try {
                         // Propagate exceptions if any.
                         get();
-                        double newT0 = fitF.getParameter(0) / fitF.getParameter(1);
+
+                        //double newT0 = fitF.getParameter(0) / fitF.getParameter(1);
+                        double newT0 = 0.5*(fitF.getParameter(0)/fitF.getParameter(1) +
+                                fitF.getParameter(2)/fitF.getParameter(3)) + calib.offset;
+                        /*
                         double newT0Err = Math.sqrt(
                                 Math.pow(fitF.parameter(0).error() / fitF.getParameter(1), 2) +
                                         Math.pow(fitF.getParameter(0) * fitF.parameter(1).error() /
                                                 Math.pow(fitF.getParameter(1), 2), 2)
                         );
+                         */
+                        double perErr0 = fitF.parameter(0).error()/fitF.getParameter(0);
+                        double perErr1 = fitF.parameter(1).error()/fitF.getParameter(1);
+                        double perErr2 = fitF.parameter(2).error()/fitF.getParameter(2);
+                        double perErr3 = fitF.parameter(3).error()/fitF.getParameter(3);
+
+                        double newT0Err = newT0*Math.sqrt(perErr0*perErr0 + perErr1*perErr1 + perErr2*perErr2 + perErr3*perErr3);
                         double chi2 = fitF.getChiSquare();
                         double ndf = fitF.getNDF();
                         double chi2ndf = (ndf > 0) ? (chi2 / ndf) : 0.0;

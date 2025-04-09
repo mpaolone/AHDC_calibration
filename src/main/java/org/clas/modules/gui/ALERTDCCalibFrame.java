@@ -61,12 +61,12 @@ public class ALERTDCCalibFrame extends JFrame {
                     tabbedPane.addTab("T0", t0Panel);
 
                     // Create the T2D panel.
-                    JPanel t2dPanel = T2DCalibration.createT2DPanel();
-                    tabbedPane.addTab("T2D", t2dPanel);
+                    //JPanel t2dPanel = T2DCalibration.createT2DPanel();
+                   // tabbedPane.addTab("T2D", t2dPanel);
 
                     // Create a panel for residuals (if separated from T2D).
-                    JPanel residualsPanel = T2DCalibration.createResidualsPanel();
-                    tabbedPane.addTab("Residuals", residualsPanel);
+                   // JPanel residualsPanel = T2DCalibration.createResidualsPanel();
+                   // tabbedPane.addTab("Residuals", residualsPanel);
 
                     tabbedPane.revalidate();
 
