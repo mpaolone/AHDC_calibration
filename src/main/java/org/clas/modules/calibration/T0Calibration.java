@@ -161,19 +161,35 @@ public class T0Calibration {
                 fitF.setParStep(3,0.01);
                 fitF.setParStep(4,0.1);
 
+                double T0 = 0.0;
+                double T0Err = 0.0;
+                double chi2 = 0.0;
+                double ndf = 0.0;
 
-                DataFitter.fit(fitF, hist, "Q");
+                if(hist.getEntries() > 500) {
+                    DataFitter.fit(fitF, hist, "Q");
+                    T0 = (fitF.getParameter(0) / fitF.getParameter(1) +
+                            fitF.getParameter(2) / fitF.getParameter(3))/2.0 + offset;
+
+                    double perErr0 = fitF.parameter(0).error()/fitF.getParameter(0);
+                    double perErr1 = fitF.parameter(1).error()/fitF.getParameter(1);
+                    double perErr2 = fitF.parameter(2).error()/fitF.getParameter(2);
+                    double perErr3 = fitF.parameter(3).error()/fitF.getParameter(3);
+
+                    T0Err = T0*Math.sqrt(perErr0*perErr0 + perErr1*perErr1 + perErr2*perErr2 + perErr3*perErr3);
+                    chi2 = fitF.getChiSquare();
+                    ndf = fitF.getNDF();
+                }else{
+                   if(rowIndex > 0){
+                       T0 = Double.parseDouble(tableData[rowIndex-1][1].toString());
+                   }else{
+                       T0 = 500.0;
+                   }
+                   T0Err = 0.0;
+                }
 
                 //double T0 = fitF.getParameter(0) / fitF.getParameter(1);
-                double T0 = (fitF.getParameter(0) / fitF.getParameter(1) +
-                        fitF.getParameter(2) / fitF.getParameter(3))/2.0 + offset;
 
-                double perErr0 = fitF.parameter(0).error()/fitF.getParameter(0);
-                double perErr1 = fitF.parameter(1).error()/fitF.getParameter(1);
-                double perErr2 = fitF.parameter(2).error()/fitF.getParameter(2);
-                double perErr3 = fitF.parameter(3).error()/fitF.getParameter(3);
-
-                double T0Err = T0*Math.sqrt(perErr0*perErr0 + perErr1*perErr1 + perErr2*perErr2 + perErr3*perErr3);
 
 
                 /*
@@ -183,16 +199,24 @@ public class T0Calibration {
                                         Math.pow(fitF.getParameter(1), 2), 2)
                 );
                  */
-                double chi2 = fitF.getChiSquare();
-                double ndf = fitF.getNDF();
+
                 double chi2ndf = (ndf > 0) ? (chi2 / ndf) : 0.0;
 
                 if(T0Err > 500.0) T0Err = 0.0;
 
-                double oldChi2ndf = chi2ndf;
                 if(chi2ndf > 5.0){
                     System.out.print("Refitting: " + chi2ndf);
                     DataFitter.fit(fitF, hist, "Q");
+                    T0 = (fitF.getParameter(0) / fitF.getParameter(1) +
+                            fitF.getParameter(2) / fitF.getParameter(3))/2.0 + offset;
+
+                    double perErr0 = fitF.parameter(0).error()/fitF.getParameter(0);
+                    double perErr1 = fitF.parameter(1).error()/fitF.getParameter(1);
+                    double perErr2 = fitF.parameter(2).error()/fitF.getParameter(2);
+                    double perErr3 = fitF.parameter(3).error()/fitF.getParameter(3);
+
+                    T0Err = T0*Math.sqrt(perErr0*perErr0 + perErr1*perErr1 + perErr2*perErr2 + perErr3*perErr3);
+
                     chi2 = fitF.getChiSquare();
                     ndf = fitF.getNDF();
                     chi2ndf = (ndf > 0) ? (chi2 / ndf) : 0.0;
@@ -200,46 +224,16 @@ public class T0Calibration {
 
                     if(chi2ndf > 5.0){
                         System.out.println("Bailing on fit, using max location - 50ns");
-                        T0 = hist.getxAxis().getBinCenter(hist.getMaximumBin()) - 50.0;
+                        T0 = hist.getxAxis().getBinCenter(hist.getMaximumBin()) - 30.0;
                         double par0 = fitF.getParameter(1)*(T0 + offset)
                                 - fitF.getParameter(2)/fitF.getParameter(3);
                         fitF.setParameter(0, par0);
-                        T0Err = 20.0;
+                        T0Err = 0.0;
                     }
                 }
 
 
-                /*
-                if(chi2ndf > 1.0) {
-
-
-                    fitF.setParameter(0, -80.0);
-                    fitF.setParameter(1, -0.14);
-                    fitF.setParameter(2, -70.0);
-                    fitF.setParameter(3, -0.12);
-                    fitF.setParameter(4, 1.0);
-
-                    DataFitter.fit(fitF, hist, "Q");
-
-                    T0 = (fitF.getParameter(0) / fitF.getParameter(1) +
-                            fitF.getParameter(2) / fitF.getParameter(3))/2.0 + offset;
-
-                    perErr0 = fitF.parameter(0).error()/fitF.getParameter(0);
-                    perErr1 = fitF.parameter(1).error()/fitF.getParameter(1);
-                    perErr2 = fitF.parameter(2).error()/fitF.getParameter(2);
-                    perErr3 = fitF.parameter(3).error()/fitF.getParameter(3);
-                }
-            */
-
                 layerFitMap.put(wire, fitF);
-                /*
-                System.out.println("Done Fitting:    " + T0 + "  " + chi2ndf);
-                System.out.println("    0: " + fitF.getParameter(0));
-                System.out.println("    1: " + fitF.getParameter(1));
-                System.out.println("    2: " + fitF.getParameter(2));
-                System.out.println("    3: " + fitF.getParameter(3));
-                System.out.println("    4: " + fitF.getParameter(4));
-*/
 
                 layerGraph.addPoint(wire, T0, 0, T0Err);
 
