@@ -78,6 +78,7 @@ public class T0Calibration {
         }
 
         // For each expected layer, build a tab.
+        Map<Integer, Object[][]> allTables = new HashMap<>();
         for (int layer : expectedLayers) {
             Map<Integer, H1F> histMap = layerHistograms.getOrDefault(layer, new HashMap<>());
             Map<Integer, F1D> layerFitMap = new HashMap<>();
@@ -144,7 +145,7 @@ public class T0Calibration {
                 fitF.setParStep(4,0.1);
 
 
-                DataFitter.fit(fitF, hist, "V");
+                DataFitter.fit(fitF, hist, "Q");
 
                 //double T0 = fitF.getParameter(0) / fitF.getParameter(1);
                 double T0 = (fitF.getParameter(0) / fitF.getParameter(1) +
@@ -186,7 +187,7 @@ public class T0Calibration {
                     fitF.setParameter(3, -0.12);
                     fitF.setParameter(4, 1.0);
 
-                    DataFitter.fit(fitF, hist, "V");
+                    DataFitter.fit(fitF, hist, "Q");
 
                     T0 = (fitF.getParameter(0) / fitF.getParameter(1) +
                             fitF.getParameter(2) / fitF.getParameter(3))/2.0 + offset;
@@ -217,13 +218,14 @@ public class T0Calibration {
                 }
 
                 layerFitMap.put(wire, fitF);
+                /*
                 System.out.println("Done Fitting:    " + T0 + "  " + chi2ndf);
                 System.out.println("    0: " + fitF.getParameter(0));
                 System.out.println("    1: " + fitF.getParameter(1));
                 System.out.println("    2: " + fitF.getParameter(2));
                 System.out.println("    3: " + fitF.getParameter(3));
                 System.out.println("    4: " + fitF.getParameter(4));
-
+*/
 
                 layerGraph.addPoint(wire, T0, 0, T0Err);
 
@@ -233,7 +235,7 @@ public class T0Calibration {
                 tableData[rowIndex][3] = String.format("%.2f", chi2ndf);
                 rowIndex++;
             }
-
+            allTables.putIfAbsent(layer,tableData);
             DefaultTableModel layerTableModel = new DefaultTableModel(tableData, colNames) {
                 @Override
                 public boolean isCellEditable(int row, int col) {
@@ -303,7 +305,21 @@ public class T0Calibration {
             layerPanel.add(buttonPanel, BorderLayout.NORTH);
 
             layeredT0Tabs.addTab("Layer " + layer, layerPanel);
+
         }
+
+        JPanel savePanel = new JPanel(new BorderLayout());
+        JButton saveTableBtn = new JButton("Save T0 Table");
+        saveTableBtn.setOpaque(true);
+        saveTableBtn.setBorderPainted(false);
+        saveTableBtn.setBackground(customOrange);
+        saveTableBtn.setForeground(Color.BLACK);
+        saveTableBtn.addActionListener(e -> {
+            FileUtils.saveT0TableToFile(allTables);
+        });
+        savePanel.add(saveTableBtn, BorderLayout.CENTER);
+        layeredT0Tabs.addTab("Save", savePanel);
+
         return layeredT0Tabs;
     }
 }

@@ -10,6 +10,8 @@ import javax.swing.table.DefaultTableModel;
 import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.util.Map;
+import java.util.TreeMap;
 
 public class FileUtils {
 
@@ -31,6 +33,31 @@ public class FileUtils {
                     "Error", JOptionPane.ERROR_MESSAGE);
             e.printStackTrace();
         }
+    }
+
+    public static void saveT0TableToFile(Map<Integer,Object[][]> allTables){
+
+        TreeMap<Integer,Object[][]> sorted = new TreeMap<>(allTables);
+        String fileName = "T0table.txt";
+        //final Integer[] nwires = {47, 56, 56, 72, 72, 87, 87, 99};
+        //String[] layers = {"11", "21", "22", "31", "32", "41","42", "51"};
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(fileName))) {
+            writer.write("# Sector Layer Component t0 dt0 extra1 extra2 chi2ndf\n");
+            sorted.forEach((sector, table) -> {
+                for(int i = 0; i < table.length; i++){
+                    try {
+                        writer.write("1  " + sector + "  " + table[i][0] + "  " + table[i][1]
+                                + "  " + table[i][2] + "  0.0  0.0  " + table[i][3] + "\n");
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                }
+            });
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
+
     }
 
     public static void saveT0TableToFile(DefaultTableModel tableModel, int layer) {
