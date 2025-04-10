@@ -36,7 +36,7 @@ public class T0Calibration {
     // Call hipo file from config
     private static final String inputFile = Config.Hipo_FILE;
     private static final int adcThresh = 100; //cut on ADC for all wires
-    public static double offset = -20.0; //in ns, offset applied to final T0 for all wires
+    public static double offset = -0.0; //in ns, offset applied to final T0 for all wires
 
     public static JTabbedPane createT0Panel() {
         JTabbedPane layeredT0Tabs = new JTabbedPane();
@@ -104,6 +104,15 @@ public class T0Calibration {
                 double xMin = Math.max(0, mean - 2 * rms);
                 double xMax = Math.min(hist.getXaxis().max(), mean + 3 * rms);
 
+                //for backgrounds
+
+                int firstBin = hist.getxAxis().getBin(300.0);
+                int lastBin = hist.getxAxis().getBin(400.0);
+                double nbinsBack = lastBin - firstBin;
+                double integralBack = hist.integral(firstBin,lastBin);
+                double avgBack = integralBack/nbinsBack;
+
+
 
                 F1D fitF = new F1D("T0Fit",
                         "(1./(1.+exp([p0]-[p1]*x))*exp([p2]-[p3]*x))+[p4]",
@@ -131,11 +140,19 @@ public class T0Calibration {
                 fitF.setParameter(4, 1.0);
                 */
 
+                /*
                 fitF.setParameter(0, -66.5);
                 fitF.setParameter(1, -0.128);
                 fitF.setParameter(2, -51.5);
                 fitF.setParameter(3, -0.10);
                 fitF.setParameter(4, 1.0);
+                 */
+
+                fitF.setParameter(0, -45.0);
+                fitF.setParameter(1, -0.085);
+                fitF.setParameter(2, -33.0);
+                fitF.setParameter(3, -0.065);
+                fitF.setParameter(4, avgBack);
 
 
                 fitF.setParStep(0,0.1);
@@ -172,14 +189,29 @@ public class T0Calibration {
 
                 if(T0Err > 500.0) T0Err = 0.0;
 
+                double oldChi2ndf = chi2ndf;
+                if(chi2ndf > 5.0){
+                    System.out.print("Refitting: " + chi2ndf);
+                    DataFitter.fit(fitF, hist, "Q");
+                    chi2 = fitF.getChiSquare();
+                    ndf = fitF.getNDF();
+                    chi2ndf = (ndf > 0) ? (chi2 / ndf) : 0.0;
+                    System.out.print(" -> " + chi2ndf + "\n");
+
+                    if(chi2ndf > 5.0){
+                        System.out.println("Bailing on fit, using max location - 50ns");
+                        T0 = hist.getxAxis().getBinCenter(hist.getMaximumBin()) - 50.0;
+                        double par0 = fitF.getParameter(1)*(T0 + offset)
+                                - fitF.getParameter(2)/fitF.getParameter(3);
+                        fitF.setParameter(0, par0);
+                        T0Err = 20.0;
+                    }
+                }
+
+
+                /*
                 if(chi2ndf > 1.0) {
-                    /*
-                    fitF.setParameter(0, -45.0);
-                    fitF.setParameter(1, -0.12);
-                    fitF.setParameter(2, -23.55);
-                    fitF.setParameter(3, -0.033);
-                    fitF.setParameter(4, 1.0);
-                    */
+
 
                     fitF.setParameter(0, -80.0);
                     fitF.setParameter(1, -0.14);
@@ -196,26 +228,8 @@ public class T0Calibration {
                     perErr1 = fitF.parameter(1).error()/fitF.getParameter(1);
                     perErr2 = fitF.parameter(2).error()/fitF.getParameter(2);
                     perErr3 = fitF.parameter(3).error()/fitF.getParameter(3);
-
-                    T0Err = T0*Math.sqrt(perErr0*perErr0 + perErr1*perErr1 + perErr2*perErr2 + perErr3*perErr3);
-
-                    /*
-                    fitF2.setParameter(0, hist.getMax());
-                    fitF2.setParameter(1, hist.getXaxis().getBinCenter(hist.getMaximumBin()));
-                    fitF2.setParameter(2, hist.getRMS());
-
-                    DataFitter.fit(fitF2, hist, "V");
-
-                    T0 = fitF2.getParameter(1) - 2.0 * fitF2.getParameter(2);
-                    T0Err = Math.sqrt(Math.pow(fitF2.parameter(1).error(), 2) +
-                            Math.pow(fitF2.parameter(2).error(), 2));
-
-                    chi2 = fitF2.getChiSquare();
-                    ndf = fitF2.getNDF();
-                    chi2ndf = (ndf > 0) ? (chi2 / ndf) : 0.0;
-                    layerFitMap.put(wire, fitF2);
-                     */
                 }
+            */
 
                 layerFitMap.put(wire, fitF);
                 /*

@@ -131,6 +131,13 @@ public class FitAdjustment {
                                 break;
                             }
                         }
+                        for (int i = 0; i < 5; i++) {
+                            //paramFields[i] = new JTextField(String.valueOf(fitF.getParameter(i)));
+                            paramFields[i] = new JTextField(String.format("%.4f",fitF.getParameter(i)));
+                        }
+                        controls.revalidate();
+                        controls.repaint();
+
                         fitCanvas.repaint();
                     } catch (Exception ex) {
                         JOptionPane.showMessageDialog(fitFrame,
