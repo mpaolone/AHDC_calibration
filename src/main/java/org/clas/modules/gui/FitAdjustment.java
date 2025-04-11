@@ -128,9 +128,14 @@ public class FitAdjustment {
                                 tableModel.setValueAt(String.format("%.4f", newT0), rr, 1);
                                 tableModel.setValueAt(String.format("%.4f", newT0Err), rr, 2);
                                 tableModel.setValueAt(String.format("%.2f", chi2ndf), rr, 3);
+                                T0Calibration.allTables.get(layer)[rr][1] =String.format("%.4f", newT0);
+                                T0Calibration.allTables.get(layer)[rr][2] =String.format("%.4f", newT0Err);
+                                T0Calibration.allTables.get(layer)[rr][3] =String.format("%.2f", chi2ndf);
                                 break;
                             }
                         }
+
+
                         for (int i = 0; i < 5; i++) {
                             //paramFields[i] = new JTextField(String.valueOf(fitF.getParameter(i)));
                             paramFields[i] = new JTextField(String.format("%.4f",fitF.getParameter(i)));

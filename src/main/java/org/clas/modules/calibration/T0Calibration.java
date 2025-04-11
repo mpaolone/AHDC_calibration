@@ -37,6 +37,7 @@ public class T0Calibration {
     private static final String inputFile = Config.Hipo_FILE;
     private static final int adcThresh = 100; //cut on ADC for all wires
     public static double offset = -0.0; //in ns, offset applied to final T0 for all wires
+    public static Map<Integer, Object[][]> allTables = new HashMap<>();
 
     public static JTabbedPane createT0Panel() {
         JTabbedPane layeredT0Tabs = new JTabbedPane();
@@ -78,7 +79,7 @@ public class T0Calibration {
         }
 
         // For each expected layer, build a tab.
-        Map<Integer, Object[][]> allTables = new HashMap<>();
+        //Map<Integer, Object[][]> allTables = new HashMap<>();
         for (int layer : expectedLayers) {
             Map<Integer, H1F> histMap = layerHistograms.getOrDefault(layer, new HashMap<>());
             Map<Integer, F1D> layerFitMap = new HashMap<>();
