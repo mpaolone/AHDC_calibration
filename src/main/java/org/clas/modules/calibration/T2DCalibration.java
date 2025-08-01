@@ -36,9 +36,9 @@ public class T2DCalibration {
         Color customOrange = new Color(255, 180, 100);
 
         // Create histograms and graphs.
-        H1F hadc = new H1F("hadc", "hadc", 100, 0, 250.0);
+        H1F hadc = new H1F("hadc", "hadc", 100, -400, 50.0);
         H1F hdoca = new H1F("hdoca", "hdoca", 100, 0., 0.4);
-        H2F htdoca = new H2F("htdoca", "htdoca", 100, 0, 5000, 100, 0., 0.4);
+        H2F htdoca = new H2F("htdoca", "htdoca", 100, -400, 50, 100, -10., 2);
         GraphErrors grdoca = new GraphErrors();
 
         CalibrationUtils cbutils = new CalibrationUtils(0);
@@ -48,9 +48,19 @@ public class T2DCalibration {
         reader.open(inputFile);
         int nevents = reader.getSize();
         for (int i = 0; i < nevents; i++) {
+
             HipoDataEvent event = (HipoDataEvent) reader.gotoEvent(i);
-            if (event.hasBank("AHDC:Hits")) {
-                HipoDataBank hitBank = (HipoDataBank) event.getBank("AHDC::Hits");
+            //System.out.println("i:    " + i + "  " + event.getBankList());
+            /*
+            for(int j = 0; j < event.getBankList().length; j++){
+                System.out.println("i:    " + i + "  " + event.getBankList()[j]);
+            }
+            */
+            HipoDataBank hitBank = (HipoDataBank) event.getBank("AHDC::hits");
+            //if (event.hasBank("AHDC:hits")) {
+            if(true){
+                //System.out.println("has hits:    " + i);
+
                 int rows = hitBank.rows();
                 for (int loop = 0; loop < rows; loop++) {
                     int layer = (int)hitBank.getByte("layer",loop);
@@ -59,11 +69,19 @@ public class T2DCalibration {
                     layer += 10*slayer;
                     //time is now t0 subtracted time in Hits bank
                     //float time = hitBank.getFloat("time", loop) - (float)cbutils.getT0off(layer,component);
-                    float time = hitBank.getFloat("time", loop);
-                    float doca = hitBank.getInt("trackDoca", loop);
-                    hadc.fill(time);
-                    hdoca.fill(doca);
-                    htdoca.fill(time, doca);
+                    double time = hitBank.getDouble("time", loop);
+                    double doca = hitBank.getDouble("doca", loop);
+                    double residual = hitBank.getDouble("residual", loop);
+                    int trackid = hitBank.getInt("trackid",loop);
+                    //time += 200;
+                    //System.out.println("trackid:    " + trackid);
+
+                    if(trackid > 0 && time > -500 && !Double.isNaN(residual) && residual != 0) {
+                        System.out.println("Filling:    " + time + "    " + doca + "   " + residual);
+                        hadc.fill(time);
+                        hdoca.fill(doca + residual);
+                        htdoca.fill(time, doca + residual);
+                    }
                 }
             }
         }
@@ -122,8 +140,8 @@ public class T2DCalibration {
         reader.open(inputFile);
         for (int i = 0; i < nevents; i++) {
             HipoDataEvent event = (HipoDataEvent) reader.gotoEvent(i);
-            if (event.hasBank("AHDC::Hits")) {
-                HipoDataBank hitBank = (HipoDataBank) event.getBank("AHDC::Hits");
+            if (event.hasBank("AHDC::hits")) {
+                HipoDataBank hitBank = (HipoDataBank) event.getBank("AHDC::hits");
                 int rows = hitBank.rows();
                 for (int loop = 0; loop < rows; loop++) {
                     int layer = (int)hitBank.getByte("layer",loop);
@@ -131,13 +149,17 @@ public class T2DCalibration {
                     int slayer = (int)hitBank.getByte("superlayer",loop);
                     layer += 10*slayer;
                     //time is now t0 subtracted time in Hits bank
-                    float time = hitBank.getFloat("time", loop);
+                    double time = hitBank.getDouble("time", loop);
                     //float time = hitBank.getFloat("time", loop) - (float)cbutils.getT0off(layer,component);
-                    float doca = hitBank.getInt("trackDoca", loop);
+                    double doca = hitBank.getDouble("doca", loop);
+                    double residual1 = hitBank.getDouble("residual", loop);
                     // Evaluate the grdoca fit function.
-                    double pedfit = fitgrdoca.evaluate(time);
-                    double residual = doca - pedfit;
-                    hresidual.fill(residual);
+                    int trackid = hitBank.getInt("trackid",loop);
+                    if(trackid > 0) {
+                        double pedfit = fitgrdoca.evaluate(time);
+                        double residual = doca + residual1 - pedfit;
+                        hresidual.fill(residual);
+                    }
                 }
             }
         }

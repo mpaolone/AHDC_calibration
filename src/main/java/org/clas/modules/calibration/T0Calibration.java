@@ -8,7 +8,9 @@ package org.clas.modules.calibration;
 
 import org.jlab.groot.data.GraphErrors;
 import org.jlab.groot.data.H1F;
+import org.jlab.groot.data.H2F;
 import org.jlab.groot.fitter.DataFitter;
+import org.jlab.groot.fitter.ParallelSliceFitter;
 import org.jlab.groot.math.F1D;
 import org.jlab.io.hipo.HipoDataBank;
 import org.jlab.io.hipo.HipoDataEvent;
@@ -36,16 +38,38 @@ public class T0Calibration {
     // Call hipo file from config
     private static final String inputFile = Config.Hipo_FILE;
     private static final int adcThresh = 100; //cut on ADC for all wires
+    private static final int adcMax = 5000; //cut on ADC for all wires
+    private static final double ToTThresh = 0.1; //cut on Time over Threshold for all wires
+    private static final double ToTMax = 1000.0;
     public static double offset = -0.0; //in ns, offset applied to final T0 for all wires
     public static Map<Integer, Object[][]> allTables = new HashMap<>();
+
+    public static double findx(F1D f, double val){
+        double min = f.getMin();
+        double max = f.getMax();
+        double range = max - min;
+        double step = range/1000.0;
+        double finalx = 0;
+        for(int i = 0; i < 1000; i++){
+            double curx = min + i*step;
+            if(f.evaluate(curx) < val){
+                finalx = curx;
+                break;
+            }
+        }
+        return finalx;
+    }
 
     public static JTabbedPane createT0Panel() {
         JTabbedPane layeredT0Tabs = new JTabbedPane();
 
         // Data storage for layered T0 calibration.
         Map<Integer, Map<Integer, H1F>> layerHistograms = new HashMap<>();
+        Map<Integer, Map<Integer, H2F>> layerHistograms2D = new HashMap<>();
         Map<Integer, Map<Integer, F1D>> layerFits = new HashMap<>();
+        Map<Integer, Map<Integer, F1D>> layerFits2D = new HashMap<>();
         Map<Integer, GraphErrors> layerGraphs = new HashMap<>();
+        Map<Integer, GraphErrors> layerGraphs2D = new HashMap<>();
 
         // Open data source and fill histograms.
         HipoDataSource reader = new HipoDataSource();
@@ -63,6 +87,8 @@ public class T0Calibration {
                     float adc =  bank.getInt("ADC", loop);
                     int layer = bank.getInt("layer", loop);
                     int component = bank.getInt("component", loop);
+                    //int wfflag = bank.getInt("wfType", loop);
+                    float ToT = bank.getFloat("timeOverThreshold",loop);
                     // Only store T0 data for expected layers.
                     if (!expectedLayers.contains(layer)) continue;
                     layerHistograms.computeIfAbsent(layer, k -> new HashMap<>());
@@ -70,20 +96,41 @@ public class T0Calibration {
                             k -> new H1F("Layer " + layer + " Component " + component,
                                     "Time for Wire " + component,
                                     500, 0, 1000));
-                    if(adc > adcThresh) {
+                    double slope = -1.0;
+                    double yint = 950.0;
+                    Boolean tcut = adc > adcThresh && adc < adcMax && ToT > ToTThresh && ToT < ToTMax && (time*slope + yint) > ToT;
+                    //if(adc > adcThresh && ToT > ToTThresh && wfflag == 0) {
+                    if(adc > adcThresh && ToT > ToTThresh) {
+                    //if(tcut){
                         layerHistograms.get(layer).get(component).fill(time);
                         //System.out.println("Filling:    " + adc + "    " + time);
                     }
+                    layerHistograms2D.computeIfAbsent(layer, k -> new HashMap<>());
+                    layerHistograms2D.get(layer).computeIfAbsent(component,
+                            k -> new H2F("Layer " + layer + " Component " + component +" 2d",
+                                    "Time for Wire " + component,
+                                    100, 0.0, 1000.0,100,0.0,1000.0));
+
+                    if(tcut){
+                        layerHistograms2D.get(layer).get(component).fill(time,ToT);
+                    }
+
                 }
             }
+
         }
 
         // For each expected layer, build a tab.
         //Map<Integer, Object[][]> allTables = new HashMap<>();
         for (int layer : expectedLayers) {
             Map<Integer, H1F> histMap = layerHistograms.getOrDefault(layer, new HashMap<>());
+            Map<Integer, H2F> histMap2D = layerHistograms2D.getOrDefault(layer, new HashMap<>());
+
             Map<Integer, F1D> layerFitMap = new HashMap<>();
+            Map<Integer, F1D> layerFitMap2D = new HashMap<>();
+
             layerFits.put(layer, layerFitMap);
+            layerFits2D.put(layer, layerFitMap2D);
 
             GraphErrors layerGraph = new GraphErrors("Layer " + layer + " T0 vs Wire");
             layerGraph.setTitleX("Wire");
@@ -103,12 +150,19 @@ public class T0Calibration {
                 double mean = hist.getMean();
                 double rms = hist.getRMS();
                 double xMin = Math.max(0, mean - 2 * rms);
+                if( xMin < 100) xMin = 100.0;
                 double xMax = Math.min(hist.getXaxis().max(), mean + 3 * rms);
+                if( xMax > 800) xMax = 800.0;
 
                 //for backgrounds
 
-                int firstBin = hist.getxAxis().getBin(300.0);
-                int lastBin = hist.getxAxis().getBin(400.0);
+                int firstBin = hist.getxAxis().getBin(500.0);
+                int lastBin = hist.getxAxis().getBin(600.0);
+
+                //int firstBin = hist.getxAxis().getBin(200.0);
+                //int lastBin = hist.getxAxis().getBin(300.0);
+
+
                 double nbinsBack = lastBin - firstBin;
                 double integralBack = hist.integral(firstBin,lastBin);
                 double avgBack = integralBack/nbinsBack;
@@ -141,13 +195,18 @@ public class T0Calibration {
                 fitF.setParameter(4, 1.0);
                 */
 
-                /*
+/*
                 fitF.setParameter(0, -66.5);
                 fitF.setParameter(1, -0.128);
                 fitF.setParameter(2, -51.5);
                 fitF.setParameter(3, -0.10);
                 fitF.setParameter(4, 1.0);
-                 */
+*/
+
+
+
+                //use for 021314 to 021416:
+
 
                 fitF.setParameter(0, -45.0);
                 fitF.setParameter(1, -0.085);
@@ -155,6 +214,20 @@ public class T0Calibration {
                 fitF.setParameter(3, -0.065);
                 fitF.setParameter(4, avgBack);
 
+/*
+                fitF.setParameter(0, -26.0);
+                fitF.setParameter(1, -0.1);
+                fitF.setParameter(2, -10.0);
+                fitF.setParameter(3, -0.045);
+                fitF.setParameter(4, avgBack);
+*/
+                /*
+                fitF.setParameter(0, -45.0);
+                fitF.setParameter(1, -0.049);
+                fitF.setParameter(2, -2.0);
+                fitF.setParameter(3, -0.03);
+                fitF.setParameter(4, avgBack);
+                */
 
                 fitF.setParStep(0,0.1);
                 fitF.setParStep(1,0.01);
@@ -180,6 +253,9 @@ public class T0Calibration {
                     T0Err = T0*Math.sqrt(perErr0*perErr0 + perErr1*perErr1 + perErr2*perErr2 + perErr3*perErr3);
                     chi2 = fitF.getChiSquare();
                     ndf = fitF.getNDF();
+
+                    System.out.print("pars: " + fitF.getParameter(0) + " " + fitF.getParameter(1) + " " +  fitF.getParameter(2) + " " + fitF.getParameter(3) + " " + fitF.getParameter(4));
+
                 }else{
                    if(rowIndex > 0){
                        T0 = Double.parseDouble(tableData[rowIndex-1][1].toString());
@@ -205,8 +281,15 @@ public class T0Calibration {
 
                 if(T0Err > 500.0) T0Err = 0.0;
 
-                if(chi2ndf > 5.0){
-                    System.out.print("Refitting: " + chi2ndf);
+                if(chi2ndf > 3.0  || T0 < 0 || T0Err < 0){
+                    System.out.println("Refitting: " + chi2ndf);
+                    if(fitF.getParameter(0) > -20.0){
+                        fitF.setParameter(0, -20.0);
+                        fitF.setParameter(1, -0.085);
+                       // fitF.setParameter(2, -33.0);
+                        //fitF.setParameter(3, -0.065);
+                        //fitF.setParameter(4, avgBack);
+                    }
                     DataFitter.fit(fitF, hist, "Q");
                     T0 = (fitF.getParameter(0) / fitF.getParameter(1) +
                             fitF.getParameter(2) / fitF.getParameter(3))/2.0 + offset;
@@ -221,9 +304,10 @@ public class T0Calibration {
                     chi2 = fitF.getChiSquare();
                     ndf = fitF.getNDF();
                     chi2ndf = (ndf > 0) ? (chi2 / ndf) : 0.0;
-                    System.out.print(" -> " + chi2ndf + "\n");
+                    System.out.println(" -> " + chi2ndf + "\n");
+                    System.out.println("new pars: " + fitF.getParameter(0) + " " + fitF.getParameter(1) + " " +  fitF.getParameter(2) + " " + fitF.getParameter(3) + " " + fitF.getParameter(4));
 
-                    if(chi2ndf > 5.0){
+                    if(chi2ndf > 3.0 || T0 <0 || T0Err < 0){
                         System.out.println("Bailing on fit, using max location - 50ns");
                         T0 = hist.getxAxis().getBinCenter(hist.getMaximumBin()) - 30.0;
                         double par0 = fitF.getParameter(1)*(T0 + offset)
@@ -234,6 +318,7 @@ public class T0Calibration {
                 }
 
 
+
                 layerFitMap.put(wire, fitF);
 
                 layerGraph.addPoint(wire, T0, 0, T0Err);
@@ -242,8 +327,56 @@ public class T0Calibration {
                 tableData[rowIndex][1] = String.format("%.4f", T0);
                 tableData[rowIndex][2] = String.format("%.4f", T0Err);
                 tableData[rowIndex][3] = String.format("%.2f", chi2ndf);
+
                 rowIndex++;
             }
+
+            //second fit:
+            /*
+            rowIndex = 0;
+            for (Map.Entry<Integer, H2F> entry : histMap2D.entrySet()) {
+                int wire = entry.getKey();
+                H2F hist = entry.getValue();
+                System.out.println("Fitting 2D:    " + layer + "  " + wire);
+
+                ParallelSliceFitter psf = new ParallelSliceFitter(hist);
+                psf.fitSlicesX();
+                GraphErrors gr = psf.getMeanSlices();
+
+                F1D f = new F1D("f", "[a]*pow(x,4) + [b]*pow(x,3) + [c]*pow(x,2) + [d]*x + [e]", 125, 500);
+                f.setParameter(0, -7.0e-9);
+                f.setParameter(1, 2.0e-5);
+                f.setParameter(2, -0.02);
+                f.setParameter(3, 6);
+                f.setParameter(4, -281);
+                f.setLineColor(2);
+                f.setLineWidth(2);
+                if(hist.getEntries() > 500) {
+                    DataFitter.fit(f, gr, "Q");
+                    double chi2 = f.getChiSquare();
+                    double ndf = f.getNDF();
+                    double chi2ndf = (ndf > 0) ? (chi2 / ndf) : 0.0;
+
+                    F1D df = new F1D("df", "4.0*[a]*pow(x,3) + 3.0*[b]*pow(x,2) + 2.0*[c]*x + [d]", 125, 500);
+                    df.setParameter(0, f.getParameter(0));
+                    df.setParameter(1, f.getParameter(1));
+                    df.setParameter(2, f.getParameter(2));
+                    df.setParameter(3, f.getParameter(3));
+                    double xval = findx(df, 1.10);
+                    layerFitMap2D.put(wire, f);
+                    layerGraph.addPoint(wire, xval, 0, xval * 0.1);
+                    tableData[rowIndex][0] = wire;
+                    tableData[rowIndex][1] = String.format("%.4f", xval);
+                    tableData[rowIndex][2] = String.format("%.4f", xval*0.1);
+                    tableData[rowIndex][3] = String.format("%.2f", chi2ndf);
+                }
+                rowIndex++;
+
+
+            }
+*/
+
+
             allTables.putIfAbsent(layer,tableData);
             DefaultTableModel layerTableModel = new DefaultTableModel(tableData, colNames) {
                 @Override
