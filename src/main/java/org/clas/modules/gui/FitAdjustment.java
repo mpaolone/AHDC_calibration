@@ -20,6 +20,8 @@ import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.awt.geom.Line2D;
 
+import static org.clas.modules.calibration.T0Calibration.txtT0;
+
 public class FitAdjustment {
 
     public static void showT0AdjustmentDialog(int layer, int wire, H1F histogram, F1D fitF,
@@ -61,6 +63,12 @@ public class FitAdjustment {
         line.setLineColor(2);
         line.setLineStyle(2);
         fitCanvas.draw(line);
+/*
+        DataLine line2 = new DataLine(txtT0.get(layer).get(wire), 0, txtT0.get(layer).get(wire), lmax);
+        line2.setLineColor(3);
+        line2.setLineStyle(2);
+        fitCanvas.draw(line2);
+ */
 
         JButton refitButton = new JButton("Refit");
         controls.add(refitButton);

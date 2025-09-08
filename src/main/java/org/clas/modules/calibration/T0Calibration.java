@@ -22,9 +22,7 @@ import org.jlab.groot.graphics.EmbeddedCanvas;
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
-import java.io.BufferedWriter;
-import java.io.FileWriter;
-import java.io.IOException;
+import java.io.*;
 import java.util.*;
 import org.clas.modules.config.Config;
 import org.clas.modules.utils.FileUtils;
@@ -43,6 +41,7 @@ public class T0Calibration {
     private static final double ToTMax = 1000.0;
     public static double offset = -0.0; //in ns, offset applied to final T0 for all wires
     public static Map<Integer, Object[][]> allTables = new HashMap<>();
+    public static Map<Integer, Map<Integer, Float>> txtT0 = new HashMap<>();
 
     public static double findx(F1D f, double val){
         double min = f.getMin();
@@ -59,9 +58,50 @@ public class T0Calibration {
         }
         return finalx;
     }
+    private static void loadTXTdb(String path){
+        try(BufferedReader br = new BufferedReader(new FileReader(path))) {
+            //StringBuilder sb = new StringBuilder();
+            String line = br.readLine();
+            line = br.readLine(); //skip first line
+            int linno = 0;
+            Map<Integer, Float> tempMap = new HashMap<>();
+            int prevSec = 11;
+            String[] splitArray = new String[8];
+            while (line != null) {
+                splitArray = line.split("\\s+");
+                if(Integer.parseInt(splitArray[1]) == prevSec) {
+                    tempMap.put(Integer.parseInt(splitArray[2]), Float.parseFloat(splitArray[3]));
+                }else{
+                    txtT0.put(prevSec, tempMap);
+                    prevSec = Integer.parseInt(splitArray[1]);
+                    tempMap.clear();
+                    tempMap.put(Integer.parseInt(splitArray[2]), Float.parseFloat(splitArray[3]));
+                }
+
+
+                //System.out.println(Integer.parseInt(splitArray[1]) + " " + Integer.parseInt(splitArray[2]) + " " + Float.parseFloat(splitArray[3]));
+//                System.out.println(linno + "  " + Integer.parseInt(splitArray[1]) + " " + Integer.parseInt(splitArray[2]) + " " + txtT0.get(Integer.parseInt(splitArray[1])).get(Integer.parseInt(splitArray[2])));
+                //sb.append(line);
+               // sb.append(System.lineSeparator());
+
+                line = br.readLine();
+                linno++;
+            }
+            txtT0.put(Integer.parseInt(splitArray[1]), tempMap);
+            //String everything = sb.toString();
+        } catch (FileNotFoundException e) {
+            throw new RuntimeException(e);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
 
     public static JTabbedPane createT0Panel() {
         JTabbedPane layeredT0Tabs = new JTabbedPane();
+        //T0Calibration.loadTXTdb("/Users/mpaolone//work/clas12/ahdc/T0table_2.txt");
+        //System.out.println("test: " + txtT0.get(11).get(10));
+        //System.out.println(txtT0.toString());
+
 
         // Data storage for layered T0 calibration.
         Map<Integer, Map<Integer, H1F>> layerHistograms = new HashMap<>();
@@ -78,16 +118,20 @@ public class T0Calibration {
         for (int i = 0; i < nevents; i++) {
             HipoDataEvent event = (HipoDataEvent) reader.gotoEvent(i);
             //System.out.println("Looking for ADC bank");
-            if (event.hasBank("AHDC::adc")) {
+            if (event.hasBank("AHDC::adc") && event.hasBank("REC::Event")) {
                 //System.out.println("Has ADC bank");
+                HipoDataBank recBank = (HipoDataBank) event.getBank("REC::Event");
+                float startTime = recBank.getFloat("startTime",0);
+
                 HipoDataBank bank = (HipoDataBank) event.getBank("AHDC::adc");
                 int rows = bank.rows();
+                //System.out.println(i + " " + rows);
                 for (int loop = 0; loop < rows; loop++) {
-                    float time = bank.getFloat("leadingEdgeTime", loop);
+                    float time = bank.getFloat("leadingEdgeTime", loop) - startTime;
                     float adc =  bank.getInt("ADC", loop);
                     int layer = bank.getInt("layer", loop);
                     int component = bank.getInt("component", loop);
-                    //int wfflag = bank.getInt("wfType", loop);
+                    int wfflag = bank.getInt("wfType", loop);
                     float ToT = bank.getFloat("timeOverThreshold",loop);
                     // Only store T0 data for expected layers.
                     if (!expectedLayers.contains(layer)) continue;
@@ -99,8 +143,8 @@ public class T0Calibration {
                     double slope = -1.0;
                     double yint = 950.0;
                     Boolean tcut = adc > adcThresh && adc < adcMax && ToT > ToTThresh && ToT < ToTMax && (time*slope + yint) > ToT;
-                    //if(adc > adcThresh && ToT > ToTThresh && wfflag == 0) {
-                    if(adc > adcThresh && ToT > ToTThresh) {
+                    if(adc > adcThresh && ToT > ToTThresh && wfflag == 0) {
+                    //if(adc > adcThresh && ToT > ToTThresh) {
                     //if(tcut){
                         layerHistograms.get(layer).get(component).fill(time);
                         //System.out.println("Filling:    " + adc + "    " + time);
@@ -156,8 +200,8 @@ public class T0Calibration {
 
                 //for backgrounds
 
-                int firstBin = hist.getxAxis().getBin(500.0);
-                int lastBin = hist.getxAxis().getBin(600.0);
+                int firstBin = hist.getxAxis().getBin(200.0);
+                int lastBin = hist.getxAxis().getBin(300.0);
 
                 //int firstBin = hist.getxAxis().getBin(200.0);
                 //int lastBin = hist.getxAxis().getBin(300.0);
@@ -208,9 +252,9 @@ public class T0Calibration {
                 //use for 021314 to 021416:
 
 
-                fitF.setParameter(0, -45.0);
+                fitF.setParameter(0, -35.0);
                 fitF.setParameter(1, -0.085);
-                fitF.setParameter(2, -33.0);
+                fitF.setParameter(2, -23.0);
                 fitF.setParameter(3, -0.065);
                 fitF.setParameter(4, avgBack);
 
@@ -254,7 +298,7 @@ public class T0Calibration {
                     chi2 = fitF.getChiSquare();
                     ndf = fitF.getNDF();
 
-                    System.out.print("pars: " + fitF.getParameter(0) + " " + fitF.getParameter(1) + " " +  fitF.getParameter(2) + " " + fitF.getParameter(3) + " " + fitF.getParameter(4));
+                    //System.out.print("pars: " + fitF.getParameter(0) + " " + fitF.getParameter(1) + " " +  fitF.getParameter(2) + " " + fitF.getParameter(3) + " " + fitF.getParameter(4));
 
                 }else{
                    if(rowIndex > 0){
@@ -281,8 +325,16 @@ public class T0Calibration {
 
                 if(T0Err > 500.0) T0Err = 0.0;
 
-                if(chi2ndf > 3.0  || T0 < 0 || T0Err < 0){
+                if((chi2ndf > 3.0  || T0 < 0 || T0Err < 0) && wire > 1){
                     System.out.println("Refitting: " + chi2ndf);
+                    //try previous wire:
+                    F1D lastFit = layerFitMap.get(wire -1);
+                    System.out.println("pars: " + fitF.getParameter(0) + " " + fitF.getParameter(1) + " " +  fitF.getParameter(2) + " " + fitF.getParameter(3) + " " + fitF.getParameter(4));
+                    System.out.println("pars(prev wire): " + lastFit.getParameter(0) + " " + lastFit.getParameter(1) + " " +  lastFit.getParameter(2) + " " + lastFit.getParameter(3) + " " + lastFit.getParameter(4));
+                    for(int kk = 0; kk < 4; kk++) {
+                        fitF.setParameter(kk, lastFit.getParameter(kk));
+                    }
+                    /*
                     if(fitF.getParameter(0) > -20.0){
                         fitF.setParameter(0, -20.0);
                         fitF.setParameter(1, -0.085);
@@ -290,7 +342,13 @@ public class T0Calibration {
                         //fitF.setParameter(3, -0.065);
                         //fitF.setParameter(4, avgBack);
                     }
-                    DataFitter.fit(fitF, hist, "Q");
+                    */
+                    if(lastFit.getParameter(0) < 0 && lastFit.getParameter(0) > -80.0) {
+                        DataFitter.fit(fitF, hist, "Q");
+                        DataFitter.fit(fitF, hist, "Q");
+                    }
+                    System.out.println("pars(new fit): " + fitF.getParameter(0) + " " + fitF.getParameter(1) + " " +  fitF.getParameter(2) + " " + fitF.getParameter(3) + " " + fitF.getParameter(4));
+
                     T0 = (fitF.getParameter(0) / fitF.getParameter(1) +
                             fitF.getParameter(2) / fitF.getParameter(3))/2.0 + offset;
 
@@ -305,7 +363,6 @@ public class T0Calibration {
                     ndf = fitF.getNDF();
                     chi2ndf = (ndf > 0) ? (chi2 / ndf) : 0.0;
                     System.out.println(" -> " + chi2ndf + "\n");
-                    System.out.println("new pars: " + fitF.getParameter(0) + " " + fitF.getParameter(1) + " " +  fitF.getParameter(2) + " " + fitF.getParameter(3) + " " + fitF.getParameter(4));
 
                     if(chi2ndf > 3.0 || T0 <0 || T0Err < 0){
                         System.out.println("Bailing on fit, using max location - 50ns");
