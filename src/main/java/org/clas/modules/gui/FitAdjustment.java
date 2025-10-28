@@ -63,12 +63,13 @@ public class FitAdjustment {
         line.setLineColor(2);
         line.setLineStyle(2);
         fitCanvas.draw(line);
-/*
-        DataLine line2 = new DataLine(txtT0.get(layer).get(wire), 0, txtT0.get(layer).get(wire), lmax);
+
+/*        DataLine line2 = new DataLine(txtT0.get(layer).get(wire), 0, txtT0.get(layer).get(wire), lmax);
         line2.setLineColor(3);
         line2.setLineStyle(2);
         fitCanvas.draw(line2);
  */
+
 
         JButton refitButton = new JButton("Refit");
         controls.add(refitButton);

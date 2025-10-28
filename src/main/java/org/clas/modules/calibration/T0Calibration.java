@@ -37,8 +37,9 @@ public class T0Calibration {
     private static final String inputFile = Config.Hipo_FILE;
     private static final int adcThresh = 100; //cut on ADC for all wires
     private static final int adcMax = 5000; //cut on ADC for all wires
-    private static final double ToTThresh = 0.1; //cut on Time over Threshold for all wires
+    private static final double ToTThresh = 440.0; //cut on Time over Threshold for all wires
     private static final double ToTMax = 1000.0;
+    private static final double pedMax = 260.0;
     public static double offset = -0.0; //in ns, offset applied to final T0 for all wires
     public static Map<Integer, Object[][]> allTables = new HashMap<>();
     public static Map<Integer, Map<Integer, Float>> txtT0 = new HashMap<>();
@@ -126,9 +127,13 @@ public class T0Calibration {
                 HipoDataBank bank = (HipoDataBank) event.getBank("AHDC::adc");
                 int rows = bank.rows();
                 //System.out.println(i + " " + rows);
+                //System.out.println(i + " " + startTime);
                 for (int loop = 0; loop < rows; loop++) {
+
                     float time = bank.getFloat("leadingEdgeTime", loop) - startTime;
+                    //float time = bank.getFloat("leadingEdgeTime", loop);
                     float adc =  bank.getInt("ADC", loop);
+                    float ped =  bank.getFloat("ped", loop);
                     int layer = bank.getInt("layer", loop);
                     int component = bank.getInt("component", loop);
                     int wfflag = bank.getInt("wfType", loop);
@@ -143,7 +148,7 @@ public class T0Calibration {
                     double slope = -1.0;
                     double yint = 950.0;
                     Boolean tcut = adc > adcThresh && adc < adcMax && ToT > ToTThresh && ToT < ToTMax && (time*slope + yint) > ToT;
-                    if(adc > adcThresh && ToT > ToTThresh && wfflag == 0) {
+                    if(adc > adcThresh && ToT > ToTThresh && ped < pedMax && wfflag == 0) {
                     //if(adc > adcThresh && ToT > ToTThresh) {
                     //if(tcut){
                         layerHistograms.get(layer).get(component).fill(time);
@@ -218,6 +223,10 @@ public class T0Calibration {
                         xMin, xMax);
 
                 F1D fitF2 = new F1D("T0Fit2","[p0]*exp(pow((x - [p1])/[p2],2))/[p2]",xMin,xMax);
+
+                double maxVal = hist.getxAxis().getBinCenter(hist.getMaximumBin());
+
+
                 //F1D fitF2 = new F1D("gaus");
                 //fitF2.setRange(xMin,xMax);
 
@@ -251,12 +260,40 @@ public class T0Calibration {
 
                 //use for 021314 to 021416:
 
+                if(maxVal > 450.0){
+                    fitF.setParameter(0, -45.0);
+                    fitF.setParameter(1, -0.049);
+                    fitF.setParameter(2, -31.0);
+                    fitF.setParameter(3, -0.03);
+                    fitF.setParameter(4, avgBack);
+                }else if(maxVal > 350.0){
+                    fitF.setParameter(0, -35.0);
+                    fitF.setParameter(1, -0.085);
+                    fitF.setParameter(2, -23.0);
+                    fitF.setParameter(3, -0.065);
+                    fitF.setParameter(4, avgBack);
+                }else if(maxVal > 250.0){
+                    fitF.setParameter(0, -26.0);
+                    fitF.setParameter(1, -0.1);
+                    fitF.setParameter(2, -10.0);
+                    fitF.setParameter(3, -0.045);
+                    fitF.setParameter(4, avgBack);
+                }else{
+                    fitF.setParameter(0, -12.0);
+                    fitF.setParameter(1, -0.049);
+                    fitF.setParameter(2, -5.0);
+                    fitF.setParameter(3, -0.03);
+                    fitF.setParameter(4, 0);
+                }
 
-                fitF.setParameter(0, -35.0);
-                fitF.setParameter(1, -0.085);
-                fitF.setParameter(2, -23.0);
-                fitF.setParameter(3, -0.065);
-                fitF.setParameter(4, avgBack);
+
+
+
+               // fitF.setParameter(0, -12.0);
+               // fitF.setParameter(1, -0.049);
+               // fitF.setParameter(2, -5.0);
+              //  fitF.setParameter(3, -0.03);
+              //  fitF.setParameter(4, 0);
 
 /*
                 fitF.setParameter(0, -26.0);
@@ -286,6 +323,7 @@ public class T0Calibration {
 
                 if(hist.getEntries() > 500) {
                     DataFitter.fit(fitF, hist, "Q");
+
                     T0 = (fitF.getParameter(0) / fitF.getParameter(1) +
                             fitF.getParameter(2) / fitF.getParameter(3))/2.0 + offset;
 
